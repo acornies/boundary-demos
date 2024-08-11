@@ -1,0 +1,66 @@
+services:
+  postgresql:
+    # network_mode: host
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: boundary
+    ports:
+      - "5432:5432"
+  # boundary-migration:
+  #   network_mode: host
+  #   image: hashicorp/boundary:latest
+  #   privileged: true
+  #   volumes:
+  #     - ./:/boundary
+  #   command: database init -config /boundary/config.hcl
+  boundary-api:
+    container_name: boundary-api
+    # network_mode: host
+    image: hashicorp/boundary:latest
+    privileged: true
+    volumes:
+      - ./:/boundary
+    ports:
+      - "9200:9200"
+      - "9201:9201"
+      - "9202:9202"
+      - "9203:9203"
+      - "9204:9204"
+      - "9205:9205"
+    environment:
+      - BOUNDARY_DATABASE_URL=postgresql://postgres:postgres@db:5432/boundary?sslmode=disable
+    command: server -config /boundary/config.hcl
+    links:
+      - fluentd
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: localhost:24224
+        tag: "{{.Name}}"
+  elasticsearch:
+    image: elasticsearch:7.17.23
+    container_name: elasticsearch
+    environment:
+      - "discovery.type=single-node"
+    expose:
+      - "9200"
+    ports:
+      - "9220:9200"
+  fluentd:
+    container_name: fluentd
+    build: ./fluentd
+    volumes:
+      - ./fluentd/conf:/fluentd/etc
+    links:
+      - "elasticsearch"
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.13.1
+    links:
+      - "elasticsearch"
+    ports:
+      - "5601:5601"
